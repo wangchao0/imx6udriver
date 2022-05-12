@@ -1,0 +1,11 @@
+**/*.json   
+**/*.o
+**/*.mod.c
+**/*.symvers
+**/*.order
+**/*.cmd
+**/*.mod.c
+./tmp_versions
+**/*.code-workspace
+**/*.mod
+
