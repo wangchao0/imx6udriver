@@ -8,4 +8,4 @@
 ./tmp_versions
 **/*.code-workspace
 **/*.mod
-
+.vimcfg
