@@ -82,7 +82,7 @@ static int chrdev_init(void)
         printk("device_create fail.\n") ;
         err = -2;
         goto device_create_fail ;
-    }  
+    }
     return 0 ;
 device_create_fail:
     class_destroy(schrdev.psClass) ;
