@@ -1,0 +1,9 @@
+1、开发板使用如下命令加载模块
+    insmod dtbled.ko
+
+2、本实验中testapp中编译生成的testapp.bin 应用程序可以用与多进程验证led驱动只能被open一次。
+    启动进程testapp.bin进程1：./testapp.bin w 0 &
+    启动进程testapp.bin进程2：./testapp.bin w 1 
+    此时会报“open dev fail."错误，表示驱动内的open只能被一个进程调用。
+
+3、注意：本实验的testapp进程使用while保证进程不退出，testapp不使用close释放句柄，因此可以模拟多进程调用驱动的场景。

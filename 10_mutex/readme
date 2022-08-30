@@ -1,0 +1,10 @@
+1、开发板使用如下命令加载模块
+    insmod dtbled.ko
+
+2、本实验中testapp中编译生成的testapp.bin 应用程序可以用与多进程验证led驱动只能被open一次。
+    启动进程testapp.bin进程1：./testapp.bin w 0 &
+    启动进程testapp.bin进程2：./testapp.bin w 1 
+    此时进程2没有日志，处于驱动open阻塞等待信号量的状态。
+    当把进程1 kill后，进程2获取到信号量，开始执行open并改变led状态
+
+3、注意：本实验的testapp进程使用while保证进程不退出，testapp不使用close释放句柄，因此可以模拟多进程调用驱动的场景。

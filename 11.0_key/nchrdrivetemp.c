@@ -1,3 +1,4 @@
+#include "asm-generic/gpio.h"
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
@@ -6,6 +7,9 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 
@@ -14,7 +18,7 @@
 #include <asm/io.h>
 
 /*1、定义全局变量和自定义结构体变量，统一管理驱动变量*/
-const char* CHRDEV_NAME = "chrdev" ;
+const char* CHRDEV_NAME = "keydev" ;
 #define DEV_MAXNUM  1
 struct chrdev_s
 {
@@ -24,6 +28,9 @@ struct chrdev_s
     struct cdev  sDev ;      //字符设备
     struct class *psClass ;  //类指针
     struct device *psDevice; //设备指针
+    struct device_node *np ; //指向设备节点的指针 
+    int key0pinnum ;          //pin在kernel中分配的编号
+    volatile int key0value ; //key0的值
 };
 static struct chrdev_s schrdev ;   //定义chrdev_s结构体变量schedev
 
@@ -33,16 +40,82 @@ static int chrdev_open(struct inode* spInode, struct file* spFilp)
     spFilp->private_data = &schrdev ;   //设置私有数据
     return 0 ;
 }
+
+static ssize_t chrdev_read(struct file *filp, char __user *buff, size_t len, loff_t *offset)
+{
+    struct chrdev_s *dev = filp->private_data ; 
+    schrdev.key0value = gpio_get_value(dev->key0pinnum) ;
+    printk("key0 value =0x%x .\n", dev->key0value) ;
+    copy_to_user(buff,  (const char*)&dev->key0value, 1) ;
+    return 1 ;
+}
+
+
 static struct file_operations ssFops = 
 {
     .owner = THIS_MODULE,
     .open = chrdev_open,
+    .read = chrdev_read,
 };
 
 /*3、实现驱动入口函数chardev_init*/
 static int chrdev_init(void)
 {
-    int err ;
+    int err, gpiocount = 0, valuelen = 0 ;
+    struct property *prop = NULL  ;
+    /*在设备树中查找gpiokey节点*/
+    schrdev.np = of_find_node_by_name(NULL, "gpiokey") ;
+    if(schrdev.np == NULL )
+    {
+        printk("find node by name: [gpiokey] fail .\n") ;
+        return -1 ;
+    }
+    else
+    {
+        printk("find_node_by_name: [gpiokey] success. \n") ;
+    }
+    /*在np节点中查找是否有key_gpio属性*/
+    prop = of_find_property(schrdev.np, "key_gpio", &valuelen) ;
+    if(prop == NULL )
+    {
+        printk("node:[gpiokey] no has property:[key_gpio].\n") ;
+        return -2 ;
+    }
+    else
+    {
+        printk("node:[gpiokey] has property:[]key_gpio],valuelen = %d.\n", valuelen) ;
+    }
+    /*key_gpio属性中有几个gpio信息*/
+    gpiocount = of_gpio_named_count(schrdev.np, "key_gpio") ;
+    printk("node:[gpiokey], property:[key_gpio] has gpio cells = %d.\n ", gpiocount ) ;
+    /*获取 key_gpio属性中的第一个cell进行gpio编号*/
+    schrdev.key0pinnum = of_get_named_gpio(schrdev.np, "key_gpio", 0) ;
+    if(schrdev.key0pinnum < 0)
+    {
+        printk("of_gpio_named_gpio failed. \n") ;
+        return -3 ;
+    }
+    printk("key0pin num = %d .\n", schrdev.key0pinnum) ;
+    /*为编号为schrdev.key0pinnum的pin分配一个GPIO管脚*/
+    err = gpio_request(schrdev.key0pinnum, "key0") ;
+    if( err != 0)
+    {
+        printk("gpio requset fail, err=%d .\n", err) ;
+    }
+    else
+    {
+        printk("gpio requset success, err = %d .\n", err ) ;
+    }
+    /*设置gpio方向为输入*/
+    if( 0 == gpio_direction_input(schrdev.key0pinnum))
+    {
+        printk("set pin input success.\n") ;
+    }
+    else
+    {
+        printk("set pin input failed.\n" ) ;
+    }
+
     /*3.1、分配设备号*/
     if( schrdev.uiMajor )   //定义主设备号
     {
@@ -82,7 +155,7 @@ static int chrdev_init(void)
         printk("device_create fail.\n") ;
         err = -2;
         goto device_create_fail ;
-    }
+    }  
     return 0 ;
 device_create_fail:
     class_destroy(schrdev.psClass) ;
@@ -96,6 +169,7 @@ cdev_add_fail:
 /*4、实现驱动出口函数*/
 static void chrdev_exit(void)
 {
+    gpio_free(schrdev.key0pinnum) ;
     /*释放顺序与入口初始化顺序的逆序*/
     device_destroy(schrdev.psClass, schrdev.uiDevid) ;
     class_destroy(schrdev.psClass) ;
